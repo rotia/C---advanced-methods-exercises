@@ -1,0 +1,66 @@
+#include <iostream>       // cout, endl
+#include <thread>         // thread
+#include <vector>         // vector
+#include <algorithm>      // accumulate
+#include <random>         // random_device, uniform_int_distribution
+
+using std::cout; using std::endl;
+
+struct Foo {
+  int n;
+  Foo(int n) : n(n)  {}
+  friend void transfer(Foo& source, Foo& target) { 
+    source.n--;
+    target.n++;
+  }
+};
+
+
+void report (std::vector<Foo>& foos) {
+  for (auto& f : foos)
+    cout << f.n << " ";
+  cout << " ->  ";
+  cout << accumulate(begin(foos), end(foos), 0, 
+                     [] (int running_total, const Foo& f) { return f.n + running_total; })
+       << endl;
+}
+
+const int N_threads = 8;
+const int transfers_per_thread = 1000;
+const int N_foos = 5;
+
+int main() {
+
+  std::vector<Foo> foos;
+  foos.reserve(N_foos);
+  for (int n=0; n<N_foos; ++n)
+    foos.emplace_back(0);
+
+  report(foos); // The sum is zero
+
+  std::vector<std::thread> threads;
+  threads.reserve(N_threads);
+  for (int n=0; n<N_threads; n++)
+    threads.emplace_back([&foos] {
+        std::random_device rd;
+        std::uniform_int_distribution<int> choose(0, foos.size()-1);
+        for (int s=0; s<transfers_per_thread; ++s) {
+
+          // Pick two different Foos
+          int left_index  = choose(rd);
+          int right_index = left_index;
+          while (left_index == right_index) {
+            right_index = choose(rd);
+          }
+          Foo& l = foos[left_index];
+          Foo& r = foos[right_index];
+
+          transfer(l, r);
+        }
+      });
+
+  for (auto& t : threads)
+    t.join();
+
+  report(foos); // The sum should still be zero
+}
